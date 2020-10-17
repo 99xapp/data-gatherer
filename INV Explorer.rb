@@ -1,13 +1,9 @@
-version = '20.915'
-vDetail = 'Vs 0.0'
-
-# 3XT will be able to run multiple data sets consecutively
+version = '20.10.5'
+vDetail = 'Vs 1.0'
 
 
 
 
-# WORK ON TIMEOUT EXCEPTION !!
-#
 
 require 'watir'
 require 'rubyXL'
@@ -31,59 +27,25 @@ end
 puts
 puts
 puts '--------------------------------'
-puts '-------INV Explorer -------'
+puts '---------INV Explorer ----------'
 puts
 
-###############################################################################
 
-#--------------------- Set Parameters Here --------------------------
+userName = "your user name"
 
-#userName = "williamhaynes" #iMac at Dovedale & MBA
-userName = "alhaynes"      #iMac at lake
-
-
-stockArray = ['SON']
-nStocks = stockArray.size
-
-stock = 'SON' # not going to use an array at first
-
-compDay = 'x' # day  
-#     or
-compDate = 'x' # entire date  
-# only set 1 or the other - not both !
-# data is a String !
-if compDay.upcase != 'X' && compDate.upcase != 'X'
-	puts 'Error in Comp Setting !'
-end
-
-# ---------------------------------------------------------------------------
-if compDay.upcase == 'X' && compDate.upcase == 'X' #--- Don't Set Here ! ---#
-	comp = 0
-else
-	comp = 1
-end	
-#-----------------------------------------------
+StockArray = ['SON','GM','F','TSLA']
+#or, a stock list could be read from the computer as a text file
+#  File.foreach('path to the file') do |line|
+#    StockArray.push(line.chomp)
+#  end
 
 
-## ------ Set Delays ------
-
-delayTime = 3600 * 0  # SET DELAY HERE 3600 = 1 hour -----------------
-sleep(delayTime)
-
-initDelay     = 2    # for first search
-loadDelay     = 5    # each pn load
-loopDelay1    = 3    # for each parts loop
-loopDelay2    = 3    # for each parts loop
-dlrTableDelay = 1
-pnDelay       = 5    # If pn isn't fresh 
-newBookDelay  = 5  # between workbooks (not 1st book, though)
 										 
-Watir.default_timeout = 30 # change as needed
+Watir.default_timeout = 60 # change as needed
+
 
 #-------------------- ^^^^ Set Parameters ^^^^ ---------------------
 
-
-##############################################################################
 
 
 
@@ -93,7 +55,7 @@ b = Watir::Browser.new
 
 #------------------------
 
-# colors (I'll use these later)
+# colors (I may use these later)
 
 white        = 'ffffff'
 yellow       = 'ffff66'
@@ -111,13 +73,12 @@ gray         = '666666'
 rr = 0 #current row
 cc = 0 #current column
 
-i = 0 #general purpose counter
+#i = 0 #general purpose counter
 
 
-#------ Sign In ------
+#------ Acquire site ------
 
 b.goto('https://www.investing.com')
-
 
 
 #---------------------
@@ -129,33 +90,34 @@ sleep(initDelay)   # not used right now
 #---------------------------
 
 
-#Start the Search
 	
-  sTime = Time.new.to_s
-  sTime = sTime[11,8]
+sTime = Time.new.to_s  #start time
+sTime = sTime[11,8]
  
 
-	# Start new Book
-	resultsBook = RubyXL::Workbook.new
-	rs1 = resultsBook.worksheets[0]
-	rs1.add_frozen_split(0,1)
+# ------ Start new Book ------
+
+resultsBook = RubyXL::Workbook.new
+rs1 = resultsBook.worksheets[0]
+rs1.add_frozen_split(0,1)
 
 
-  ## ------------------------------------------ 
+## ------------------------------------------ 
 
 
-  # ------ Results Location -----------
+# ------ Results Location -----------
 
-  # ------ Set Filename and Path ------
+# ------ Set Filename and Path ------
 
-  time = Time.new
-  y = time.year.to_s
-  m = time.month.to_s
-  d = time.day.to_s
+time = Time.new
+y = time.year.to_s
+m = time.month.to_s
+d = time.day.to_s
 
-  fileName = 'Prices ' + ' ' + y + '.' + m + '.' + d
+  fileName = 'Stocks ' + ' ' + y + '.' + m + '.' + d
 
-  savePath = '/Users/' + userName + '/Dropbox/Dempsey/Stock ' + fileName + '.xlsx'
+  savePath = '/Users/' + userName + '/Dropbox/------/------/------/' + fileName + '.xlsx'
+  #Example savePath = '/Users/' + userName + '/Dropbox/Dempsey/' + filename + '.xlsx'
   puts 'Save as ' + savePath
 
 
@@ -165,52 +127,70 @@ sleep(initDelay)   # not used right now
   rs1[0][0].change_fill(yellow)
   rs1.add_cell(0, 1,'PRICE')
   rs1[0][1].change_fill(yellow)
+  rs1.add_cell(0, 2,'CHANGE')
+  rs1[0][2].change_fill(yellow)
+  rs1.add_cell(0, 3,'%')
+  rs1[0][3].change_fill(yellow)
   
   
-  #------ Search -------------
+  # ============ Search Loop ============
   
-  # faster !  this does work, but slow
-  b.div(class: 'searchBoxContainer').text_field(class: 'searchText').set 'SON'
+StockArray.each do |stock|
+  
+  b.div(class: 'searchBoxContainer').text_field(class: 'searchText').set stock
   #b.text_field(class: "searchText").set "SON"  also works
 	b.send_keys :enter
 
 
- # select SON - the top one
+  # select the top one
   
- div1 = b.div(class: 'searchSectionMain').wait_until(message: 'div1 ?') { |el| el.present? }
- sLink = div1.link(class: ['js-inner-all-results-quote-item','row'])
- sLink.click
+  div1 = b.div(class: 'searchSectionMain').wait_until(message: 'div1 ?') { |el| el.present? }
+  sLink = div1.link(class: ['js-inner-all-results-quote-item','row'])
+  sLink.click
  
- # now read the data
+  # now read the data
  
- sCostRaw = b.span(id: 'last_last').wait_until(message: 'Cost ?') { |el| el.present? }
- sCost = sCostRaw.text
- puts sCost
+ # deeper specification seems to increase speed
+ # ie, sCost can be found with sCostRaw = b.span(id: 'last_last').wait_until(message: 'Cost ?') { |el| el.present? }
+ # but giving a better spec helps Watir find the element with less searching - I think ...
  
+ 	sDiv = b.div(class: 'overViewBox').div(id: 'quotes_summary_current_data').div(class: 'current-data').div(class: 'inlineblock').div(class: 'top')
  
- # Write to workbook
-  rs1.add_cell(1,0,'SON')
-  rs1.add_cell(1,1,sCost)
+  sCostRaw = sDiv.span(id: 'last_last').wait_until(message: 'Cost ?') { |el| el.present? }
+  sCost = sCostRaw.text
+  puts sCost
+ 
+  sChngRaw = sDiv.span(class: 'arial_20')
+  sChng = sChngRaw.text
+  puts sChng
+ 
+  pCentRaw = sDiv.span(class: 'parentheses')
+  pCent = pCentRaw.text
+  puts pCent
+
+
+#  sChngRaw = b.span(class: ['arial_20', 'greenFont', 'pid-20726-pc'])
+#  sChng = sChngRaw.text
+#  puts sChng
+ 
+#  pCentRaw = b.span(class: ['arial_20', 'greenFont', 'pid-20726-pcp', 'parentheses'])
+#  pCent = pCentRaw.text
+#  puts pCent
+ 
+ 	rr += 1  #advance to next row
+  # Write to workbook
+  rs1.add_cell(rr,0,stock)
+  rs1.add_cell(rr,1,sCost)
+  rs1.add_cell(rr,2,sChng)
+  rs1.add_cell(rr,3,pCent)
 
  
  # Write the Book to the computer
  resultsBook.write savePath
 
 
+end  # of search loop
 
-
-
-
-
-
-#----Unused ----
-#  <div class="searchBoxContainer topBarSearch topBarInputSelected">
-#	    <input autocomplete="off" type="text" class="searchText arial_12 lightgrayFont js-main-search-bar" value="" placeholder="Search the website...">
-#		<label class="searchGlassIcon js-magnifying-glass-icon">&nbsp;</label>
-#		<i class="cssSpinner"></i>
-#	</div>
-
-  	#b.button(class: "searchGlassIcon").click didn't find it ...
 
   
   
